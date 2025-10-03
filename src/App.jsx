@@ -2,10 +2,16 @@ import { useState } from 'react';
 import './App.css';
 
 function App() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [txt, setTxt] = useState("");
+  const [data, setData] = useState({
+    name:"",
+    email:"",
+    birthdate:"",
+    login:"",
+    password:"",
+    repeat:""
+  });
+
+ const [txt, setTxt] = useState("");
 
 
 const request = (url, conf) => new Promise((resolve, reject) => {
@@ -18,15 +24,59 @@ const request = (url, conf) => new Promise((resolve, reject) => {
       if (j.status && j.status.isSuccess) {
         resolve(j.data ?? j);
       } else {
-        // fallback for old-style feedback responses
         resolve(j);
       }
     })
     .catch(err => reject(err));
 });
+ const register = () => {
+  if (!data.name || !data.email || !data.login || !data.password || !data.repeat) {
+    alert("Заповніть усі поля!");
+    return;
+  }
+  if (data.password !== data.repeat) {
+    alert("Паролі не співпадають!");
+    return;
+  }
+
+  request("/api/client", {
+    method: "POST",
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify(data)
+  })
+  .then(j => {
+    // якщо бекенд кинув помилку про логін
+    if (typeof j === "string" && j.includes("login") && j.includes("taken")) {
+      alert(j);
+      setTxt(j);
+      return;
+    }
+
+    if (j.error) {
+      alert("Помилка: " + j.error);
+      setTxt(JSON.stringify(j));
+    } else {
+      alert("Успішна реєстрація!");
+      setTxt(JSON.stringify(j));
+
+      // очищаємо форму
+      setData({
+        name: "",
+        email: "",
+        birthdate: "",
+        login: "",
+        password: "",
+        repeat: ""
+      });
+    }
+  })
+  .catch(err => {
+    alert("Помилка: " + err);
+  });
+};
 
   const testGetClient = () => {
-    request("/api/client").then(setTxt);
+    request("/api/client/login").then(setTxt);
   };
 
   const testPostClient = () => {
@@ -35,9 +85,9 @@ const request = (url, conf) => new Promise((resolve, reject) => {
       headers: {
         'Content-Type': 'application/json; charset=utf-8'
       },
-      body: JSON.stringify({ name, email, phone })
+      body: JSON.stringify(data)
     })
-      .then(setTxt)
+      .then(j => setTxt(JSON.stringify(j)));
     // .then(r => {
     //   if (r.status !== 200) {
     //     setTxt(`Сервер відповів помилкою ${r.status}`);
@@ -67,8 +117,6 @@ const request = (url, conf) => new Promise((resolve, reject) => {
       .then(setTxt);
   };
 
-  // --- FeedbackController methods ---
-   // --- FeedbackController methods ---
   const testGetFeedback = () => {
     request("/api/feedback").then(setTxt);
   };
@@ -100,6 +148,10 @@ const request = (url, conf) => new Promise((resolve, reject) => {
       .then(setTxt);
   };
 
+  const install=() => {
+     request("/api/client/install")
+     .then(j => setTxt(JSON.stringify(j)));
+  };
 
   return (
     <>
@@ -112,25 +164,18 @@ const request = (url, conf) => new Promise((resolve, reject) => {
       <button onClick={testPatchClient}>PATCH</button>
       <button onClick={testDeleteClient}>DELETE</button>
 
+      <button onClick={install}>INSTALL</button>
+
+
       <div style={{ margin: "10px 0", padding: "5px" }}>
-        <input
-          type="text"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="Name"
-        /><br />
-        <input
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="Email"
-        /><br />
-        <input
-          type="tel"
-          value={phone}
-          onChange={e => setPhone(e.target.value)}
-          placeholder="Phone"
-        /><br />
+      <input type="text" placeholder="Enter name" value={data.name} onChange={e => setData({ ...data, name: e.target.value })} /><br />
+<input type="email" placeholder="Enter email" value={data.email} onChange={e => setData({ ...data, email: e.target.value })} /><br />
+<input type="date" placeholder="Enter birthdate" value={data.birthdate} onChange={e => setData({ ...data, birthdate: e.target.value })} /><br />
+<input type="text" placeholder="Enter login" value={data.login} onChange={e => setData({ ...data, login: e.target.value })} /><br />
+<input type="password" placeholder="Enter password" value={data.password} onChange={e => setData({ ...data, password: e.target.value })} /><br />
+<input type="password" placeholder="Repeat password" value={data.repeat} onChange={e => setData({ ...data, repeat: e.target.value })} /><br />
+<button onClick={register}>Register</button>
+
       </div>
 
       <h2>FeedbackController</h2>
