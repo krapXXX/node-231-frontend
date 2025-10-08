@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import './App.css';
-
+import Base64 from './base_64.js';
 function App() {
   const [data, setData] = useState({
     name:"",
@@ -12,6 +12,11 @@ function App() {
   });
 
  const [txt, setTxt] = useState("");
+
+const [auth, setAuth] = useState({
+    login: "",
+    password: ""
+  })
 
 
 const request = (url, conf) => new Promise((resolve, reject) => {
@@ -152,7 +157,19 @@ const request = (url, conf) => new Promise((resolve, reject) => {
      request("/api/client/install")
      .then(j => setTxt(JSON.stringify(j)));
   };
+const onAuthClick=()=>
+{
+  console.log(`user-id:${auth.login},password:${auth.password}`);
+const userPass = auth.login+':'+auth.password;
+const credentials= Base64.encode(userPass);
+console.log(credentials);
+request("/api/client/auth",{
+  method:"GET",
+  headers:{"Authorization":'Basic '+credentials}
+})
+     .then(j => setTxt(JSON.stringify(j)));
 
+}
   return (
     <>
       <h1>API Tester</h1>
@@ -186,7 +203,22 @@ const request = (url, conf) => new Promise((resolve, reject) => {
       <button onClick={testDeleteFeedback}>DELETE</button>
 
       <pre style={{ marginTop: 20, padding: 10 }}>{txt}</pre>
+
+        <div style={{ margin: "10px 0", padding: "5px" }}>
+        <h2>Автентифікація</h2>
+        <label>
+          <span>Login </span>
+          <input type="text" value={auth.login} onChange={e => setAuth({...auth, login:e.target.value})}/>
+        </label> <br/>
+        <label>
+          <span>Password </span>
+          <input type="password" value={auth.password} onChange={e => setAuth({...auth, password:e.target.value})}/> <br/>
+        </label> <br/>
+        <button onClick={onAuthClick}>Вхід</button>
+      </div>
+      <p>{txt}</p>
     </>
+
   );
 }
 
