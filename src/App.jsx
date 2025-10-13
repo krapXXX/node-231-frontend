@@ -1,84 +1,130 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css';
 import Base64 from './base_64.js';
+
+const tokenKey = "token-231"
+
 function App() {
-  const [data, setData] = useState({
-    name:"",
-    email:"",
-    birthdate:"",
-    login:"",
-    password:"",
-    repeat:""
+
+  const [token, setToken] = useState(null);
+  const [payload,setPayLoad]=useState(null);
+
+  useEffect(() => {
+    const t = window.localStorage.getItem(tokenKey);
+    if (t) {
+      setToken(t);
+    }
+  }, []);
+
+  const timerTick = () => {
+  console.log(payload.exp);
+};
+
+  useEffect(() => {
+  let timer;
+  if (token != null) {
+    window.localStorage.setItem(tokenKey, token);
+    setPayload(Base64.jwtDecodePayload(token));
+    timer = setInterval(timerTick, 1000);
+  } 
+  else {
+    window.localStorage.removeItem(tokenKey);
+    setPayload(null);
+    if (timer) {
+      clearInterval(timer);
+    }
+  }
+}, [token]);
+
+
+  const request = (url, conf) => new Promise((resolve, reject) => {
+    if (url.startsWith('/')) {
+      url = "http://localhost:81" + url;
+    }
+    if (token != null) {
+      if (typeof conf == 'undefined') {
+        conf = {};
+      }
+      if (typeof conf.headers == 'undefined') {
+        conf.headers = {};
+      }
+      if (typeof conf.headers["Authorization"] == 'undefined') {
+        conf.headers["Authorization"] = "Bearer " + token;
+      }
+    }
+    fetch(url, conf)
+      .then(r => r.json())
+      .then(j => {
+        if (j.status.isSuccess) {
+          resolve(j.data);
+        } else {
+          console.error(j);
+          reject(j);
+        }
+      })
+      .catch(reject);
   });
 
- const [txt, setTxt] = useState("");
+  return token == null ? <GuestMode request={request} setToken={setToken} /> :
+    <AuthMode request={request} setToken={setToken} />;
+}
 
-const [auth, setAuth] = useState({
+function AuthMode({ request, setToken }) {
+  const [data, setData] = useState({
+    name: "",
+    email: "",
+    birthdate: "",
     login: "",
-    password: ""
-  })
+    password: "",
+    repeat: ""
+  });
 
-
-const request = (url, conf) => new Promise((resolve, reject) => {
-  if (url.startsWith('/')) {
-    url = "http://localhost:81" + url;
-  }
-  fetch(url, conf)
-    .then(r => r.json())
-    .then(j => {
-      if (j.status && j.status.isSuccess) {
-        resolve(j.data ?? j);
-      } else {
-        resolve(j);
-      }
-    })
-    .catch(err => reject(err));
-});
- const register = () => {
-  if (!data.name || !data.email || !data.login || !data.password || !data.repeat) {
-    alert("Заповніть усі поля!");
-    return;
-  }
-  if (data.password !== data.repeat) {
-    alert("Паролі не співпадають!");
-    return;
-  }
-
-  request("/api/client", {
-    method: "POST",
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-    body: JSON.stringify(data)
-  })
-  .then(j => {
-    // якщо бекенд кинув помилку про логін
-    if (typeof j === "string" && j.includes("login") && j.includes("taken")) {
-      alert(j);
-      setTxt(j);
+  const [txt, setTxt] = useState("");
+  const register = () => {
+    if (!data.name || !data.email || !data.login || !data.password || !data.repeat) {
+      alert("Заповніть усі поля!");
+      return;
+    }
+    if (data.password !== data.repeat) {
+      alert("Паролі не співпадають!");
       return;
     }
 
-    if (j.error) {
-      alert("Помилка: " + j.error);
-      setTxt(JSON.stringify(j));
-    } else {
-      alert("Успішна реєстрація!");
-      setTxt(JSON.stringify(j));
+    request("/api/client", {
+      method: "POST",
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(data)
+    })
+      .then(j => {
+        // якщо бекенд кинув помилку про логін
+        if (typeof j === "string" && j.includes("login") && j.includes("taken")) {
+          alert(j);
+          setTxt(j);
+          return;
+        }
 
-      // очищаємо форму
-      setData({
-        name: "",
-        email: "",
-        birthdate: "",
-        login: "",
-        password: "",
-        repeat: ""
+        if (j.error) {
+          alert("Помилка: " + j.error);
+          setTxt(JSON.stringify(j));
+        } else {
+          alert("Успішна реєстрація!");
+          setTxt(JSON.stringify(j));
+
+          // очищаємо форму
+          setData({
+            name: "",
+            email: "",
+            birthdate: "",
+            login: "",
+            password: "",
+            repeat: ""
+          });
+        }
+      })
+      .catch(err => {
+        alert("Помилка: " + err);
       });
-    }
-  })
-  .catch(err => {
-    alert("Помилка: " + err);
-  });
-};
+  };
 
   const testGetClient = () => {
     request("/api/client/login").then(setTxt);
@@ -126,7 +172,7 @@ const request = (url, conf) => new Promise((resolve, reject) => {
     request("/api/feedback").then(setTxt);
   };
 
-   const testPostFeedback = () => {
+  const testPostFeedback = () => {
     request("/api/feedback", {
       method: "POST",
       headers: {
@@ -135,7 +181,7 @@ const request = (url, conf) => new Promise((resolve, reject) => {
       body: JSON.stringify({ name, email, phone })
     })
       .then(setTxt)
-  
+
   };
 
   const testPutFeedback = () => {
@@ -153,23 +199,56 @@ const request = (url, conf) => new Promise((resolve, reject) => {
       .then(setTxt);
   };
 
-  const install=() => {
-     request("/api/client/install")
-     .then(j => setTxt(JSON.stringify(j)));
+  const install = () => {
+    request("/api/client/install")
+      .then(j => setTxt(JSON.stringify(j)));
   };
-const onAuthClick=()=>
-{
-  console.log(`user-id:${auth.login},password:${auth.password}`);
-const userPass = auth.login+':'+auth.password;
-const credentials= Base64.encode(userPass);
-console.log(credentials);
-request("/api/client/auth",{
-  method:"GET",
-  headers:{"Authorization":'Basic '+credentials}
-})
-     .then(j => setTxt(JSON.stringify(j)));
-
-}
+  const testAuth1 = () => {
+    request("/api/client/login", {
+      headers: {
+        "Authorization": ""
+      }
+    })
+      .then(setTxt)
+      .catch(j => setTxt(j.data));
+  }
+  const testAuth2 = () => {
+    request("/api/client/login", {
+      headers: {
+        "Authorization": "123"
+      }
+    })
+      .then(setTxt)
+      .catch(j => setTxt(j.data));
+  }
+  const testAuth3 = () => {
+    request("/api/client/login", {
+      headers: {
+        "Authorization": "Bearer 123"
+      }
+    })
+      .then(setTxt)
+      .catch(j => setTxt(j.data));
+  }
+  const testAuth4 = () => {
+    request("/api/client/login", {
+      headers: {
+        "Authorization": "Bearer ~.!.%"
+      }
+    })
+      .then(setTxt)
+      .catch(j => setTxt(j.data));
+  }
+  const testAuth5 = () => {
+    const h = btoa("x = 10")
+    request("/api/client/login", {
+      headers: {
+        "Authorization": `Bearer ${h}.${h}.${h}`
+      }
+    })
+      .then(setTxt)
+      .catch(j => setTxt(j.data));
+  }
   return (
     <>
       <h1>API Tester</h1>
@@ -182,16 +261,26 @@ request("/api/client/auth",{
       <button onClick={testDeleteClient}>DELETE</button>
 
       <button onClick={install}>INSTALL</button>
+      <button onClick={() => setToken(null)}>Exit auth mode</button>
+      <div style={{ border: "1px solid gray", padding: 5, marginTop: 10 }}>
+        <h3>Test reject token</h3>
+        <button onClick={testAuth1}>Порожній заголовок</button>
+        <button onClick={testAuth2}>Неправильна структура заголовку</button>
+        <button onClick={testAuth3}>Неправильна схема заголовку</button>
+        <button onClick={testAuth4}>Не Base 64</button>
+        <button onClick={testAuth5}>Не JSON</button>
 
 
-      <div style={{ margin: "10px 0", padding: "5px" }}>
-      <input type="text" placeholder="Enter name" value={data.name} onChange={e => setData({ ...data, name: e.target.value })} /><br />
-<input type="email" placeholder="Enter email" value={data.email} onChange={e => setData({ ...data, email: e.target.value })} /><br />
-<input type="date" placeholder="Enter birthdate" value={data.birthdate} onChange={e => setData({ ...data, birthdate: e.target.value })} /><br />
-<input type="text" placeholder="Enter login" value={data.login} onChange={e => setData({ ...data, login: e.target.value })} /><br />
-<input type="password" placeholder="Enter password" value={data.password} onChange={e => setData({ ...data, password: e.target.value })} /><br />
-<input type="password" placeholder="Repeat password" value={data.repeat} onChange={e => setData({ ...data, repeat: e.target.value })} /><br />
-<button onClick={register}>Register</button>
+      </div>
+
+      <div style={{ border: "1px solid gray", padding: 5, marginTop: 10 }}>
+        <input type="text" placeholder="Enter name" value={data.name} onChange={e => setData({ ...data, name: e.target.value })} /><br />
+        <input type="email" placeholder="Enter email" value={data.email} onChange={e => setData({ ...data, email: e.target.value })} /><br />
+        <input type="date" placeholder="Enter birthdate" value={data.birthdate} onChange={e => setData({ ...data, birthdate: e.target.value })} /><br />
+        <input type="text" placeholder="Enter login" value={data.login} onChange={e => setData({ ...data, login: e.target.value })} /><br />
+        <input type="password" placeholder="Enter password" value={data.password} onChange={e => setData({ ...data, password: e.target.value })} /><br />
+        <input type="password" placeholder="Repeat password" value={data.repeat} onChange={e => setData({ ...data, repeat: e.target.value })} /><br />
+        <button onClick={register}>Register</button>
 
       </div>
 
@@ -204,22 +293,63 @@ request("/api/client/auth",{
 
       <pre style={{ marginTop: 20, padding: 10 }}>{txt}</pre>
 
-        <div style={{ margin: "10px 0", padding: "5px" }}>
-        <h2>Автентифікація</h2>
-        <label>
-          <span>Login </span>
-          <input type="text" value={auth.login} onChange={e => setAuth({...auth, login:e.target.value})}/>
-        </label> <br/>
-        <label>
-          <span>Password </span>
-          <input type="password" value={auth.password} onChange={e => setAuth({...auth, password:e.target.value})}/> <br/>
-        </label> <br/>
-        <button onClick={onAuthClick}>Вхід</button>
-      </div>
+
       <p>{txt}</p>
     </>
-
-  );
+  )
 }
 
+function GuestMode({ request, setToken }) {
+  const [auth, setAuth] = useState({
+    login: "",
+    password: ""
+  })
+  const [txt, setTxt] = useState("");
+
+  const testGetClient = () => {
+    request("/api/client/login")
+      .then(setTxt)
+      .catch(j => {
+        setTxt(j.data);
+      });
+  }
+  const onAuthClick = () => {
+    console.log(`user-id:${auth.login},password:${auth.password}`);
+    const userPass = auth.login + ':' + auth.password;
+    const credentials = Base64.encode(userPass);
+    console.log(credentials);
+    request("/api/client/auth", {
+      method: "GET",
+      headers: {
+        "Authorization": 'Basic ' + credentials
+      }
+    })
+      .then(j => {
+        setToken(j);
+      })
+      .catch(j => {
+        setTxt(j.data);
+      })
+
+
+  };
+
+
+  return <>
+    <div style={{ margin: "10px 0", padding: "5px" }}>
+      <h2>Автентифікація</h2>
+      <label>
+        <span>Login </span>
+        <input type="text" value={auth.login} onChange={e => setAuth({ ...auth, login: e.target.value })} />
+      </label> <br />
+      <label>
+        <span>Password </span>
+        <input type="password" value={auth.password} onChange={e => setAuth({ ...auth, password: e.target.value })} /> <br />
+      </label> <br />
+      <button onClick={onAuthClick}>Вхід</button>
+    </div>
+    <button onClick={testGetClient}>GET</button>
+    <p>{txt}</p>
+  </>
+}
 export default App;
