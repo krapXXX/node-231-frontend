@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import './App.css';
 import Base64 from './base_64.js';
+import FeedbackPanel from "./FeedbackPanel.jsx";
 
 const tokenKey = "token-231"
 
 function App() {
 
   const [token, setToken] = useState(null);
-  const [payload,setPayLoad]=useState(null);
-
+  const [payload, setPayload] = useState(null);
+  const [timeBack, setTimeBack] = useState(null);
   useEffect(() => {
     const t = window.localStorage.getItem(tokenKey);
     if (t) {
@@ -17,25 +18,40 @@ function App() {
   }, []);
 
   const timerTick = () => {
-  console.log(payload.exp);
-};
+    console.log(payload.exp);
+  };
 
   useEffect(() => {
-  let timer;
-  if (token != null) {
-    window.localStorage.setItem(tokenKey, token);
-    setPayload(Base64.jwtDecodePayload(token));
-    timer = setInterval(timerTick, 1000);
-  } 
-  else {
-    window.localStorage.removeItem(tokenKey);
-    setPayload(null);
-    if (timer) {
-      clearInterval(timer);
+    if (token != null) {
+      window.localStorage.setItem(tokenKey, token);
+      setPayload(Base64.jwtDecodePayload(token));
     }
-  }
-}, [token]);
+    else {
+      window.localStorage.removeItem(tokenKey);
+      setPayload(null);
+    }
+  }, [token]);
 
+  useEffect(() => {
+    if (payload) {
+
+      const timerTick = () => {
+        const time_back = payload.exp - new Date().getTime() / 1000;
+        const seconds = Math.max(0, Math.floor(time_back));
+
+        setTimeBack(seconds);
+
+        if (seconds <= 0) {
+          setToken(null);
+          clearInterval(timer);
+        }
+      };
+
+      timerTick(); 
+      let timer = setInterval(timerTick, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [payload]);
 
   const request = (url, conf) => new Promise((resolve, reject) => {
     if (url.startsWith('/')) {
@@ -66,10 +82,10 @@ function App() {
   });
 
   return token == null ? <GuestMode request={request} setToken={setToken} /> :
-    <AuthMode request={request} setToken={setToken} />;
+    <AuthMode request={request} setToken={setToken} timeBack={timeBack} />;
 }
 
-function AuthMode({ request, setToken }) {
+function AuthMode({ request, setToken, timeBack }) {
   const [data, setData] = useState({
     name: "",
     email: "",
@@ -168,37 +184,6 @@ function AuthMode({ request, setToken }) {
       .then(setTxt);
   };
 
-  const testGetFeedback = () => {
-    request("/api/feedback").then(setTxt);
-  };
-
-  const testPostFeedback = () => {
-    request("/api/feedback", {
-      method: "POST",
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8'
-      },
-      body: JSON.stringify({ name, email, phone })
-    })
-      .then(setTxt)
-
-  };
-
-  const testPutFeedback = () => {
-    request("/api/feedback", { method: "PUT" })
-      .then(setTxt);
-  };
-
-  const testPatchFeedback = () => {
-    request("/api/feedback", { method: "PATCH" })
-      .then(setTxt);
-  };
-
-  const testDeleteFeedback = () => {
-    request("/api/feedback", { method: "DELETE" })
-      .then(setTxt);
-  };
-
   const install = () => {
     request("/api/client/install")
       .then(j => setTxt(JSON.stringify(j)));
@@ -249,6 +234,67 @@ function AuthMode({ request, setToken }) {
       .then(setTxt)
       .catch(j => setTxt(j.data));
   }
+  const testAuth6 = () => {
+  const h = btoa('"just a string"'); // JSON-рядок, а не об'єкт
+  request("/api/client/login", {
+    headers: {
+      "Authorization": `Bearer ${h}.${h}.${h}`
+    }
+  })
+    .then(setTxt)
+    .catch(j => setTxt(j.data));
+};
+const testAuth7 = () => {
+  const h = btoa(JSON.stringify({ alg: "HS256" }));
+  request("/api/client/login", {
+    headers: {
+      "Authorization": `Bearer ${h}.${h}.${h}`
+    }
+  })
+    .then(setTxt)
+    .catch(j => setTxt(j.data));
+};
+const testAuth8 = () => {
+  const h = btoa(JSON.stringify({ typ: "JWS", alg: "HS256" }));
+  request("/api/client/login", {
+    headers: {
+      "Authorization": `Bearer ${h}.${h}.${h}`
+    }
+  })
+    .then(setTxt)
+    .catch(j => setTxt(j.data));
+};
+const testAuth9 = () => {
+  const h = btoa(JSON.stringify({ typ: "JWT" }));
+  request("/api/client/login", {
+    headers: {
+      "Authorization": `Bearer ${h}.${h}.${h}`
+    }
+  })
+    .then(setTxt)
+    .catch(j => setTxt(j.data));
+};
+const testAuth10 = () => {
+  const h = btoa(JSON.stringify({ typ: "JWT", alg: "None" }));
+  request("/api/client/login", {
+    headers: {
+      "Authorization": `Bearer ${h}.${h}.${h}`
+    }
+  })
+    .then(setTxt)
+    .catch(j => setTxt(j.data));
+};
+const testAuth11 = () => {
+  const h = btoa(JSON.stringify({ typ: "JWT", alg: "HS256" }));
+  request("/api/client/login", {
+    headers: {
+      "Authorization": `Bearer ${h}.${h}.RANDOM_SIGNATURE`
+    }
+  })
+    .then(setTxt)
+    .catch(j => setTxt(j.data));
+};
+
   return (
     <>
       <h1>API Tester</h1>
@@ -262,16 +308,30 @@ function AuthMode({ request, setToken }) {
 
       <button onClick={install}>INSTALL</button>
       <button onClick={() => setToken(null)}>Exit auth mode</button>
-      <div style={{ border: "1px solid gray", padding: 5, marginTop: 10 }}>
-        <h3>Test reject token</h3>
-        <button onClick={testAuth1}>Порожній заголовок</button>
-        <button onClick={testAuth2}>Неправильна структура заголовку</button>
-        <button onClick={testAuth3}>Неправильна схема заголовку</button>
-        <button onClick={testAuth4}>Не Base 64</button>
-        <button onClick={testAuth5}>Не JSON</button>
+     <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", justifyContent: "center"  }}>
+  <span style={{ fontWeight: "bold" }}>
+     {timeBack} <br /> Seconds until exit
+  </span>
+</div>
 
 
-      </div>
+     <div style={{ border: "1px solid gray", padding: 10, marginTop: 20 }}>
+  <h3>Test reject token</h3>
+
+    <button onClick={testAuth1}>Порожній заголовок</button>
+    <button onClick={testAuth2} style={{ margin: 5 }}>Неправильна структура заголовку</button>
+    <button onClick={testAuth3} style={{ margin: 5 }}>Неправильна схема заголовку</button>
+    <button onClick={testAuth4} style={{ margin: 5 }}>Не Base 64</button>
+    <button onClick={testAuth5} style={{ margin: 5 }}>Не JSON</button>
+
+    <button onClick={testAuth6}>Header JSON, але не об'єкт</button>
+    <button onClick={testAuth7} style={{ margin: 5 }}>Відсутній .typ</button>
+    <button onClick={testAuth8} style={{ margin: 5 }}>Неправильний .typ = "JWS"</button>
+    <button onClick={testAuth9} style={{ margin: 5 }}>Відсутній .alg</button>
+    <button onClick={testAuth10} style={{ margin: 5 }}>Неправильний .alg = "None"</button>
+    <button onClick={testAuth11} style={{ margin: 5 }}>Неправильний підпис</button>
+</div>
+
 
       <div style={{ border: "1px solid gray", padding: 5, marginTop: 10 }}>
         <input type="text" placeholder="Enter name" value={data.name} onChange={e => setData({ ...data, name: e.target.value })} /><br />
@@ -284,14 +344,7 @@ function AuthMode({ request, setToken }) {
 
       </div>
 
-      <h2>FeedbackController</h2>
-      <button onClick={testGetFeedback}>GET</button>
-      <button onClick={testPostFeedback}>POST</button>
-      <button onClick={testPutFeedback}>PUT</button>
-      <button onClick={testPatchFeedback}>PATCH</button>
-      <button onClick={testDeleteFeedback}>DELETE</button>
-
-      <pre style={{ marginTop: 20, padding: 10 }}>{txt}</pre>
+      <FeedbackPanel request={request} />
 
 
       <p>{txt}</p>
@@ -352,4 +405,5 @@ function GuestMode({ request, setToken }) {
     <p>{txt}</p>
   </>
 }
+
 export default App;
